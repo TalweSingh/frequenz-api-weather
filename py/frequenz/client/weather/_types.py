@@ -82,6 +82,12 @@ class ForecastFeature(enum.Enum):
         return ForecastFeature(forecast_feature)
 
 
+SOLAR_PARAMETERS = {
+    ForecastFeature.SURFACE_SOLAR_RADIATION_DOWNWARDS,
+    ForecastFeature.SURFACE_NET_SOLAR_RADIATION,
+}
+
+
 @dataclass(frozen=True)
 class Location:
     """Location data.
@@ -296,6 +302,82 @@ class Forecasts:
             raise RuntimeError("Error processing forecast data") from e
 
         return array
+
+    def upsample_vlf(
+        self,
+        array: np.ndarray[
+            tuple[typing.Any, typing.Any, typing.Any], np.dtype[np.float64]
+        ],
+        validity_times: list[dt.datetime],
+        target_times: list[dt.datetime],
+        features: list[ForecastFeature],
+        solar_offset_sec: int = 1800,
+    ) -> np.ndarray[tuple[typing.Any, typing.Any, typing.Any], np.dtype[np.float64]]:
+        """Upsample the forecast array to requested timestamps.
+
+        Args:
+            array: 3D array from to_ndarray_vlf (time, location, feature)
+            validity_times: List of original timestamps
+            target_times: List of desired timestamps to interpolate to
+            features: List of forecast features
+            solar_offset_sec: Time offset in seconds to shift solar forecasts
+
+        Returns:
+            Resampled 3D array with same structure interpolated to target timestamps
+
+        Raises:
+            ValueError: If input dimensions don't match or timestamps aren't monotonic
+        """
+        # Check input dimensions
+        if array.shape[0] != len(validity_times):
+            raise ValueError(
+                f"Time dimension of input array ({array.shape[0]}) does not match "
+                f"number of validity times ({len(validity_times)})"
+            )
+        if array.shape[2] != len(features):
+            raise ValueError(
+                f"Feature dimension of input array ({array.shape[2]}) does not match "
+                f"number of features ({len(features)})"
+            )
+
+        # Validate target timestamps are strictly increasing
+        if not all(t1 < t2 for t1, t2 in zip(target_times[:-1], target_times[1:])):
+            raise ValueError("target_times must be strictly increasing")
+
+        vts = np.array([t.timestamp() for t in validity_times])
+        tts = np.array([t.timestamp() for t in target_times])
+
+        resampled = np.zeros((len(target_times), array.shape[1], array.shape[2]))
+
+        # Get indices of solar and non-solar features
+        solar_idxs = [i for i, f in enumerate(features) if f in SOLAR_PARAMETERS]
+        other_idxs = [i for i, f in enumerate(features) if f not in SOLAR_PARAMETERS]
+
+        # Handle non-solar features with direct interpolation
+        if other_idxs:
+            resampled[..., other_idxs] = np.apply_along_axis(
+                lambda x: np.interp(tts, vts, x),
+                axis=0,
+                arr=array[..., other_idxs],
+            )
+
+        # Handle solar features with shifted interpolation
+        if solar_idxs:
+            # Shift validity times by solar_offset_sec for solar parameters
+            shifted_vts = vts + solar_offset_sec
+            resampled[..., solar_idxs] = np.apply_along_axis(
+                lambda x: np.interp(
+                    tts,
+                    shifted_vts,
+                    x,
+                    left=x[0],
+                    right=x[-1],
+                ),
+                axis=0,
+                arr=array[..., solar_idxs],
+            )
+
+        return resampled
 
 
 ForecastData = namedtuple(
