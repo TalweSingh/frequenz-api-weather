@@ -53,7 +53,14 @@ class Client(BaseApiClient[weather_pb2_grpc.WeatherForecastServiceStub]):
 
     @property
     def stub(self) -> weather_pb2_grpc.WeatherForecastServiceAsyncStub:
-        """The gRPC stub for the API."""
+        """The gRPC stub for the API.
+
+        Returns:
+            The async gRPC stub for the Weather Forecast Service.
+
+        Raises:
+            ClientNotConnected: If the client is not connected to the server.
+        """
         if self.channel is None or self._stub is None:
             raise ClientNotConnected(server_url=self.server_url, operation="stub")
         # This type: ignore is needed because we need to cast the sync stub to

@@ -513,6 +513,7 @@ class TestForecasts:
                 features=features,
             )
 
+    # pylint: disable=too-many-locals
     def test_upsample_vlf_mixed_parameters(
         self,
         forecastdata: tuple[

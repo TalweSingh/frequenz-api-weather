@@ -178,6 +178,7 @@ class Forecasts:
 
         Raises:
             ValueError: If the forecasts data is missing or invalid.
+            RuntimeError: If there is an error processing the forecast data.
         """
         # check for empty forecasts data
         if not self._forecasts_pb.location_forecasts:
@@ -303,6 +304,7 @@ class Forecasts:
 
         return array
 
+    # pylint: disable=too-many-arguments
     def upsample_vlf(
         self,
         array: np.ndarray[
@@ -439,6 +441,7 @@ def flatten(
 
     Args:
         location_forecasts: The location forecasts to flatten.
+
     Returns:
         List of named tuples with the flattened forecast data.
     """
