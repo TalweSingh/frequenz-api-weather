@@ -9,9 +9,11 @@
 # pylint doesn't understand the imports from the generated proto modules.
 # pylint: disable=no-name-in-module,no-member
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List
 
 import numpy as np
+import pytest
 from _pytest.logging import LogCaptureFixture
 from frequenz.api.common.v1.location_pb2 import Location as LocationProto
 from frequenz.api.weather import weather_pb2
@@ -190,6 +192,15 @@ class TestForecasts:
     valid_ts3 = datetime.fromisoformat("2024-01-01T03:00:00")
     invalid_ts = datetime.fromisoformat("2024-01-02T03:00:00")
 
+    @pytest.fixture
+    def sample_times(self) -> List[datetime]:
+        """Fixture providing sample validity times."""
+        return [
+            datetime.fromisoformat("2024-01-01T01:00:00"),
+            datetime.fromisoformat("2024-01-01T02:00:00"),
+            datetime.fromisoformat("2024-01-01T03:00:00"),
+        ]
+
     def test_from_pb(
         self,
         forecastdata: tuple[
@@ -360,3 +371,188 @@ class TestForecasts:
         assert array[2, 1, 0] == 110
         assert array[2, 1, 1] == 111
         assert array[2, 1, 2] == 112
+
+    def test_upsample_vlf_basic(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test basic upsampling from 1h to various valid intervals.
+
+        Tests multiple valid target periods and verifies interpolation accuracy.
+        """
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        features = [
+            ForecastFeature.U_WIND_COMPONENT_100_METRE,
+            ForecastFeature.V_WIND_COMPONENT_100_METRE,
+        ]
+
+        original = forecasts.to_ndarray_vlf(features=features)
+
+        # Test different valid periods
+        for minutes in [15, 20, 30]:
+            target_period = timedelta(minutes=minutes)
+            resampled = forecasts.upsample_vlf(
+                original,
+                target_period=target_period,
+                validity_times=sample_times,
+                features=features,
+            )
+
+            # Verify dimensions
+            expected_timesteps = (len(sample_times) - 1) * (60 // minutes) + 1
+            assert resampled.shape == (
+                expected_timesteps,
+                original.shape[1],
+                len(features),
+            )
+
+            # Verify original points are preserved
+            steps_per_hour = 60 // minutes
+            for i in range(len(sample_times)):
+                np.testing.assert_allclose(
+                    resampled[i * steps_per_hour, :, :],
+                    original[i, :, :],
+                    rtol=1e-10,
+                    err_msg=f"Original values not preserved for {minutes}min intervals",
+                )
+
+    def test_upsample_vlf_solar_parameters(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test upsampling of solar radiation parameters.
+
+        Verifies:
+        1. Values before first shifted point use the first value
+        2. Values at shifted points (original + 30min) match original values
+        3. Values between shifted points are interpolated
+        """
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        solar_features = [
+            ForecastFeature.SURFACE_SOLAR_RADIATION_DOWNWARDS,
+        ]
+
+        original = forecasts.to_ndarray_vlf(features=solar_features)
+        target_period = timedelta(minutes=30)
+        resampled = forecasts.upsample_vlf(
+            original,
+            target_period=target_period,
+            validity_times=sample_times,
+            features=solar_features,
+        )
+
+        # Check dimensions (2 points per hour interval + endpoint)
+        expected_timesteps = (len(sample_times) - 1) * 2 + 1
+        assert resampled.shape == (
+            expected_timesteps,
+            original.shape[1],
+            len(solar_features),
+        )
+
+        for loc in range(original.shape[1]):
+            # First values (before and at shifted point) should equal first original value
+            np.testing.assert_allclose(
+                resampled[0:2, loc, 0],  # 01:00 and 01:30
+                original[0, loc, 0],
+                rtol=1e-10,
+                err_msg="Incorrect handling of left boundary values before shift",
+            )
+
+            # Values at shifted points should match original values
+            for i in range(len(sample_times) - 1):
+                shifted_idx = i * 2 + 1  # Index for XX:30 values
+                np.testing.assert_allclose(
+                    resampled[shifted_idx, loc, 0],
+                    original[i, loc, 0],
+                    rtol=1e-10,
+                    err_msg=f"Original value not preserved at shifted point {i}",
+                )
+
+    @pytest.mark.parametrize(
+        "invalid_period",
+        [
+            timedelta(minutes=7),  # Doesn't divide hour evenly
+            timedelta(minutes=0),  # Zero period
+            timedelta(minutes=-30),  # Negative period
+            timedelta(hours=2),  # Larger than original period
+        ],
+    )
+    def test_upsample_vlf_invalid_periods(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+        invalid_period: timedelta,
+    ) -> None:
+        """Test upsampling with various invalid target periods."""
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        features = [ForecastFeature.U_WIND_COMPONENT_100_METRE]
+        original = forecasts.to_ndarray_vlf(features=features)
+
+        with pytest.raises(ValueError):
+            forecasts.upsample_vlf(
+                original,
+                target_period=invalid_period,
+                validity_times=sample_times,
+                features=features,
+            )
+
+    def test_upsample_vlf_mixed_parameters(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test upsampling with mix of solar and non-solar parameters."""
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        mixed_features = [
+            ForecastFeature.U_WIND_COMPONENT_100_METRE,
+            ForecastFeature.SURFACE_SOLAR_RADIATION_DOWNWARDS,
+        ]
+
+        original = forecasts.to_ndarray_vlf(features=mixed_features)
+        target_period = timedelta(minutes=30)
+        resampled = forecasts.upsample_vlf(
+            original,
+            target_period=target_period,
+            validity_times=sample_times,
+            features=mixed_features,
+        )
+
+        # Verify dimensions (2 points per hour interval + endpoint)
+        expected_timesteps = (len(sample_times) - 1) * 2 + 1
+        assert resampled.shape == (
+            expected_timesteps,
+            original.shape[1],
+            len(mixed_features),
+        )
+
+        steps_per_hour = 2  # 30-minute intervals
+        for i in range(len(sample_times) - 1):
+            # Wind component (regular interpolation)
+            np.testing.assert_allclose(
+                resampled[i * steps_per_hour, :, 0],
+                original[i, :, 0],
+                rtol=1e-10,
+                err_msg="Original wind values not preserved at regular points",
+            )
+
+            # Solar component (shifted interpolation)
+            np.testing.assert_allclose(
+                resampled[i * steps_per_hour + 1, :, 1],
+                original[i, :, 1],
+                rtol=1e-10,
+                err_msg="Original solar values not preserved at shifted points",
+            )
