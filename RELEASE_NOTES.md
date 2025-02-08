@@ -17,6 +17,7 @@
   request historical weather data for user-defined parameters.
   Replaces the historical forecast example.
 
+* Add a function to the client to upsample forecast data.
 
 <!-- Here goes the main new features and examples or instructions on how to use them -->
 
