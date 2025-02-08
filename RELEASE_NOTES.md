@@ -15,6 +15,8 @@
   horizon of returned forecasts. When not specified, forecasts with their
   minimum/maximum available horizon will be returned.
 
+* Add a function to the client to upsample forecast data.
+
 <!-- Here goes the main new features and examples or instructions on how to use them -->
 
 ## Bug Fixes
