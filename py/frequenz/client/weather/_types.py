@@ -82,6 +82,12 @@ class ForecastFeature(enum.Enum):
         return ForecastFeature(forecast_feature)
 
 
+SOLAR_PARAMETERS = {
+    ForecastFeature.SURFACE_SOLAR_RADIATION_DOWNWARDS,
+    ForecastFeature.SURFACE_NET_SOLAR_RADIATION,
+}
+
+
 @dataclass(frozen=True)
 class Location:
     """Location data.
@@ -296,6 +302,106 @@ class Forecasts:
             raise RuntimeError("Error processing forecast data") from e
 
         return array
+
+    def upsample_vlf(
+        self,
+        array: np.ndarray[
+            tuple[typing.Any, typing.Any, typing.Any], np.dtype[np.float64]
+        ],
+        target_period: dt.timedelta,
+        validity_times: list[dt.datetime],
+        features: list[ForecastFeature],
+        original_period: dt.timedelta = dt.timedelta(hours=1),
+    ) -> np.ndarray[tuple[typing.Any, typing.Any, typing.Any], np.dtype[np.float64]]:
+        """Upsample the forecast array to a higher frequency.
+
+        Args:
+            array: 3D array from to_ndarray_vlf (time, location, feature)
+            target_period: Desired sampling period
+            validity_times: List of original timestamps
+            features: List of forecast features
+            original_period: Original sampling period, defaults to 1 hour
+
+        Returns:
+            Resampled 3D array with same structure but more timesteps
+
+        Raises:
+            ValueError: If target period doesn't divide evenly into original period,
+                      if target/original period is zero or negative,
+                      if timestamps are outside valid range,
+                      or if input dimensions don't match validity_times and features
+        """
+        # Check input dimensions
+        if array.shape[0] != len(validity_times):
+            raise ValueError(
+                f"Time dimension of input array ({array.shape[0]}) does not match "
+                f"number of validity times ({len(validity_times)})"
+            )
+        if array.shape[2] != len(features):
+            raise ValueError(
+                f"Feature dimension of input array ({array.shape[2]}) does not match "
+                f"number of features ({len(features)})"
+            )
+
+        # Validate periods are positive greater than zero
+        if target_period.total_seconds() <= 0:
+            raise ValueError(f"Target period {target_period} must be greater than zero")
+        if original_period.total_seconds() <= 0:
+            raise ValueError(
+                f"Original period {original_period} must be greater than zero"
+            )
+
+        # Validate target period is an exact dvisor of the original period
+        if original_period.total_seconds() % target_period.total_seconds() != 0:
+            raise ValueError(
+                f"Target period {target_period} must an exact divisor "
+                f"of the original period {original_period}"
+            )
+
+        # Calculate number of steps between original samples
+        steps_per_period = int(
+            original_period.total_seconds() / target_period.total_seconds()
+        )
+
+        # Create new timestamps array
+        new_times = []
+        for i in range(len(validity_times) - 1):
+            start = validity_times[i]
+            for step in range(steps_per_period):
+                new_times.append(start + target_period * step)
+        new_times.append(validity_times[-1])  # Add final timestamp
+
+        # Initialize output array
+        new_shape = (len(new_times), array.shape[1], array.shape[2])
+        resampled = np.zeros(new_shape)
+
+        # Process each location and feature
+        for loc in range(array.shape[1]):
+            for feat_idx, feature in enumerate(features):
+                values = array[:, loc, feat_idx]
+
+                if feature in SOLAR_PARAMETERS:
+                    # For solar parameters, shift by half of ORIGINAL period
+                    half_period = original_period.total_seconds() / 2
+                    shifted_times = [
+                        t + dt.timedelta(seconds=half_period) for t in validity_times
+                    ]
+                    resampled[:, loc, feat_idx] = np.interp(
+                        [t.timestamp() for t in new_times],
+                        [t.timestamp() for t in shifted_times],
+                        values,
+                        left=values[0],  # Use first value instead of extrapolating
+                        right=values[-1],  # Use last value instead of extrapolating
+                    )
+                else:
+                    # Regular linear interpolation for other parameters
+                    resampled[:, loc, feat_idx] = np.interp(
+                        [t.timestamp() for t in new_times],
+                        [t.timestamp() for t in validity_times],
+                        values,
+                    )
+
+        return resampled
 
 
 ForecastData = namedtuple(
