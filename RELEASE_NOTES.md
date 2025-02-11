@@ -17,6 +17,10 @@
   request historical weather data for user-defined parameters.
   Replaces the historical forecast example.
 
+* Added optional `forecast_horizon` parameter to `ReceiveLiveWeatherForecastRequest`
+  that allows limiting the forecast horizon of returned forecasts. When not
+  specified, forecasts with their maximum available horizon will be returned.
+
 
 <!-- Here goes the main new features and examples or instructions on how to use them -->
 
