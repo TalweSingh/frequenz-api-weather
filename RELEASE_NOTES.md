@@ -10,6 +10,11 @@
 
 ## New Features
 
+* Added optional `forecast_horizon_min` and `forecast_horizon_max` parameter
+  to `ReceiveLiveWeatherForecastRequest` that allows limiting the forecast
+  horizon of returned forecasts. When not specified, forecasts with their
+  minimum/maximum available horizon will be returned.
+
 <!-- Here goes the main new features and examples or instructions on how to use them -->
 
 ## Bug Fixes
