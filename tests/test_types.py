@@ -9,9 +9,11 @@
 # pylint doesn't understand the imports from the generated proto modules.
 # pylint: disable=no-name-in-module,no-member
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List
 
 import numpy as np
+import pytest
 from _pytest.logging import LogCaptureFixture
 from frequenz.api.common.v1.location_pb2 import Location as LocationProto
 from frequenz.api.weather import weather_pb2
@@ -190,6 +192,15 @@ class TestForecasts:
     valid_ts3 = datetime.fromisoformat("2024-01-01T03:00:00")
     invalid_ts = datetime.fromisoformat("2024-01-02T03:00:00")
 
+    @pytest.fixture
+    def sample_times(self) -> List[datetime]:
+        """Fixture providing sample validity times."""
+        return [
+            datetime.fromisoformat("2024-01-01T01:00:00"),
+            datetime.fromisoformat("2024-01-01T02:00:00"),
+            datetime.fromisoformat("2024-01-01T03:00:00"),
+        ]
+
     def test_from_pb(
         self,
         forecastdata: tuple[
@@ -360,3 +371,206 @@ class TestForecasts:
         assert array[2, 1, 0] == 110
         assert array[2, 1, 1] == 111
         assert array[2, 1, 2] == 112
+
+    def test_upsample_vlf_basic(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test basic upsampling with different target timestamps.
+
+        Tests interpolation with 15-minute intervals and verifies accuracy.
+        """
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        features = [
+            ForecastFeature.U_WIND_COMPONENT_100_METRE,
+            ForecastFeature.V_WIND_COMPONENT_100_METRE,
+        ]
+
+        original = forecasts.to_ndarray_vlf(features=features)
+
+        # Create 15-minute target timestamps
+        target_times = []
+        start_time = sample_times[0]
+        end_time = sample_times[-1]
+        current = start_time
+        while current <= end_time:
+            target_times.append(current)
+            current += timedelta(minutes=15)
+
+        resampled = forecasts.upsample_vlf(
+            original,
+            validity_times=sample_times,
+            target_times=target_times,
+            features=features,
+        )
+
+        # Verify dimensions
+        assert resampled.shape == (len(target_times), original.shape[1], len(features))
+
+        # Verify original points are preserved
+        for i, time in enumerate(sample_times):
+            target_idx = target_times.index(time)
+            np.testing.assert_allclose(
+                resampled[target_idx, :, :],
+                original[i, :, :],
+                rtol=1e-10,
+                err_msg="Original values not preserved at hourly points",
+            )
+
+    def test_upsample_vlf_solar_parameters(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test upsampling of solar radiation parameters.
+
+        Verifies:
+        1. Values before first shifted point use the first value
+        2. Values at shifted points (original + 30min) match original values
+        3. Values between shifted points are interpolated
+        """
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        solar_features = [
+            ForecastFeature.SURFACE_SOLAR_RADIATION_DOWNWARDS,
+        ]
+
+        original = forecasts.to_ndarray_vlf(features=solar_features)
+
+        # Create 30-minute target timestamps
+        target_times = []
+        start_time = sample_times[0]
+        end_time = sample_times[-1]
+        current = start_time
+        while current <= end_time:
+            target_times.append(current)
+            current += timedelta(minutes=30)
+
+        resampled = forecasts.upsample_vlf(
+            original,
+            validity_times=sample_times,
+            target_times=target_times,
+            features=solar_features,
+        )
+
+        # Check dimensions
+        assert resampled.shape == (
+            len(target_times),
+            original.shape[1],
+            len(solar_features),
+        )
+
+        for loc in range(original.shape[1]):
+            # First values should equal first original value
+            np.testing.assert_allclose(
+                resampled[0, loc, 0],  # 01:00
+                original[0, loc, 0],
+                rtol=1e-10,
+                err_msg="Incorrect handling of first value",
+            )
+
+            # Values at shifted points should match original values
+            for i in range(len(sample_times) - 1):
+                shifted_idx = i * 2 + 1  # Index for XX:30 values
+                np.testing.assert_allclose(
+                    resampled[shifted_idx, loc, 0],
+                    original[i, loc, 0],
+                    rtol=1e-10,
+                    err_msg=f"Original value not preserved at shifted point {i}",
+                )
+
+    def test_upsample_vlf_invalid_timestamps(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test upsampling with invalid target timestamps."""
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        features = [ForecastFeature.U_WIND_COMPONENT_100_METRE]
+        original = forecasts.to_ndarray_vlf(features=features)
+
+        # Non-monotonic target times
+        invalid_times = [
+            sample_times[0],
+            sample_times[0] + timedelta(minutes=30),
+            sample_times[0],  # Repeated timestamp
+        ]
+
+        with pytest.raises(ValueError):
+            forecasts.upsample_vlf(
+                original,
+                validity_times=sample_times,
+                target_times=invalid_times,
+                features=features,
+            )
+
+    # pylint: disable=too-many-locals
+    def test_upsample_vlf_mixed_parameters(
+        self,
+        forecastdata: tuple[
+            weather_pb2.ReceiveLiveWeatherForecastResponse, int, int, int
+        ],
+        sample_times: List[datetime],
+    ) -> None:
+        """Test upsampling with mix of solar and non-solar parameters."""
+        forecasts_proto, _, _, _ = forecastdata
+        forecasts = Forecasts.from_pb(forecasts_proto)
+        mixed_features = [
+            ForecastFeature.U_WIND_COMPONENT_100_METRE,
+            ForecastFeature.SURFACE_SOLAR_RADIATION_DOWNWARDS,
+        ]
+
+        original = forecasts.to_ndarray_vlf(features=mixed_features)
+
+        # Create 15-minute target timestamps
+        target_times = []
+        start_time = sample_times[0]
+        end_time = sample_times[-1]
+        current = start_time
+        while current <= end_time:
+            target_times.append(current)
+            current += timedelta(minutes=15)
+
+        resampled = forecasts.upsample_vlf(
+            original,
+            validity_times=sample_times,
+            target_times=target_times,
+            features=mixed_features,
+        )
+
+        # Verify dimensions
+        assert resampled.shape == (
+            len(target_times),
+            original.shape[1],
+            len(mixed_features),
+        )
+
+        # Check original points for wind component
+        for i, time in enumerate(sample_times):
+            target_idx = target_times.index(time)
+            np.testing.assert_allclose(
+                resampled[target_idx, :, 0],
+                original[i, :, 0],
+                rtol=1e-10,
+                err_msg="Original wind values not preserved",
+            )
+
+        # Check shifted points for solar component
+        for i in range(len(sample_times) - 1):
+            shift_time = sample_times[i] + timedelta(minutes=30)
+            target_idx = target_times.index(shift_time)
+            np.testing.assert_allclose(
+                resampled[target_idx, :, 1],
+                original[i, :, 1],
+                rtol=1e-10,
+                err_msg="Original solar values not preserved at shifted points",
+            )
