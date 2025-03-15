@@ -15,7 +15,8 @@
   horizon of returned forecasts. When not specified, forecasts with their
   minimum/maximum available horizon will be returned.
 
-* Add a function to the client to upsample forecast data.
+* ~~Add a function to the client to upsample forecast data.~~ The client will be moved to
+  [frequenz-client-weather-python](https://github.com/frequenz-floss/frequenz-client-weather-python).
 
 <!-- Here goes the main new features and examples or instructions on how to use them -->
 
