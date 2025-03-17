@@ -35,9 +35,6 @@ requires-python = ">= 3.11, < 4"
 dependencies = [
   "frequenz-api-common >= 0.6.0, < 0.7.0",
   "googleapis-common-protos >= 1.56.4, < 2",
-  "frequenz-channels >= 1.6.1, < 2",
-  "frequenz-client-base >= 0.9.0, < 0.10",
-  "numpy >= 1.24.2, < 2",
   # We can't widen beyond 6 because of protobuf cross-version runtime guarantees
   # https://protobuf.dev/support/cross-version-runtime-guarantee/#major
   "protobuf >= 4.25.3, < 6", # Do not widen beyond 6!
@@ -47,9 +44,6 @@ dependencies = [
   "grpcio >= 1.54.2, < 2", # Do not widen beyond 2!
 ]
 dynamic = ["version"]
-
-[project.scripts]
-weather-cli = "frequenz.client.weather.cli.__main__:main"
 
 [[project.authors]]
 name = "Frequenz Energy-as-a-Service GmbH"
@@ -177,7 +171,7 @@ namespace_packages = true
 # used but getting the original ignored error when removing the type: ignore.
 # See for example: https://github.com/python/mypy/issues/2960
 #no_incremental = true
-packages = ["frequenz.api.weather", "frequenz.client.weather"]
+packages = ["frequenz.api.weather"]
 strict = true
 
 [[tool.mypy.overrides]]
