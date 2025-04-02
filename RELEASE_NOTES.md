@@ -14,6 +14,10 @@ the installation and usage instructions provided in the new repository.
 
 - The historical RPC replaced pagination with streaming.
 
+- Added optional `forecast_horizon_min` and `forecast_horizon_max` parameter
+  to `ReceiveHistoricalWeatherForecastRequest` that allows limiting the forecast
+  horizon of returned forecasts.
+
 ## New Features
 
 ## Bug Fixes
