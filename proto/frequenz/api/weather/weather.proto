@@ -112,13 +112,13 @@ message GetHistoricalWeatherForecastRequest {
   // will be returned.
   repeated ForecastFeature features = 2;
 
-  // The UTC timestamp indicating the start of the requested historical forecast
-  // period.
-  google.protobuf.Timestamp start_ts = 3;
+  // The start of the forecast creation time range to query. Only forecasts
+  // created at or after this UTC timestamp will be included.
+  google.protobuf.Timestamp creation_start_ts = 3;
 
-  // The UTC timestamp indicating the end of the requested historical forecast
-  // period.
-  google.protobuf.Timestamp end_ts = 4;
+  // The end of the forecast creation time range to query. Only forecasts
+  // created before this UTC timestamp will be included.
+  google.protobuf.Timestamp creation_end_ts = 4;
 
   // The parameters define the 'page_size' and the 'page_token'. An inital
   // query of a request will omit the 'page_token'. Subsequent queries of the
