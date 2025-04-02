@@ -66,6 +66,7 @@ jobs:
     steps:
       - name: Setup Git
         uses: frequenz-floss/gh-action-setup-git@v0.x.x
+        # TODO(cookiecutter): Uncomment this for projects with private dependencies
         # with:
         #   username: ${{ secrets.GIT_USER }}
         #   password: ${{ secrets.GIT_PASS }}
@@ -117,15 +118,26 @@ jobs:
     # The job name should match the name of the `nox` job.
     name: Test with nox
     needs: ["nox"]
+    # We skip this job only if nox was also skipped
+    if: always() && needs.nox.result != 'skipped'
     runs-on: ubuntu-20.04
+    env:
+      DEPS_RESULT: ${{ needs.nox.result }}
     steps:
-      - name: Return true
-        run: "true"
+      - name: Check matrix job result
+        run: test "$DEPS_RESULT" = "success"
 
   build:
     name: Build distribution packages
     runs-on: ubuntu-20.04
     steps:
+      - name: Setup Git
+        uses: frequenz-floss/gh-action-setup-git@v0.x.x
+        # TODO(cookiecutter): Uncomment this for projects with private dependencies
+        # with:
+        #   username: ${{ secrets.GIT_USER }}
+        #   password: ${{ secrets.GIT_PASS }}
+
       - name: Fetch sources
         uses: actions/checkout@v4
         with:
@@ -195,6 +207,7 @@ jobs:
     steps:
       - name: Setup Git
         uses: frequenz-floss/gh-action-setup-git@v0.x.x
+        # TODO(cookiecutter): Uncomment this for projects with private dependencies
         # with:
         #   username: ${{ secrets.GIT_USER }}
         #   password: ${{ secrets.GIT_PASS }}
@@ -362,7 +375,7 @@ jobs:
       # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
       id-token: write
     steps:
-      - name: Download package
+      - name: Download distribution files
         uses: actions/download-artifact@v4
         with:
           name: dist-packages
