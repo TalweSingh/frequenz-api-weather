@@ -5,7 +5,7 @@
 requires = [
   "setuptools == 68.1.0",
   "setuptools_scm[toml] == 7.1.0",
-  "frequenz-repo-config[api] == 0.12.3",
+  "frequenz-repo-config[api] == 0.13.1",
   # We need to pin the protobuf, grpcio and  grpcio-tools dependencies to make
   # sure the code is generated using the minimum supported versions, as older
   # versions can't work with code that was generated with newer versions.
@@ -66,9 +66,9 @@ dev-mkdocs = [
   "mkdocs-literate-nav == 0.6.1",
   "mkdocs-macros-plugin == 1.0.4",
   "mkdocs-material == 9.4.4",
-  "mkdocstrings[python] == 0.27.0",
-  "mkdocstrings-python == 1.10.8",
-  "frequenz-repo-config[api] == 0.12.3",
+  "mkdocstrings[python] == 0.28.0",
+  "mkdocstrings-python == 1.14.6",
+  "frequenz-repo-config[api] == 0.13.1",
 ]
 dev-mypy = [
   "mypy == 1.5.1",
@@ -79,7 +79,7 @@ dev-mypy = [
 ]
 dev-noxfile = [
   "nox == 2024.4.15",
-  "frequenz-repo-config[api] == 0.12.3",
+  "frequenz-repo-config[api] == 0.13.1",
 ]
 dev-pylint = [
   "pylint == 3.0.2",
@@ -88,7 +88,7 @@ dev-pylint = [
 ]
 dev-pytest = [
   "pytest == 8.3.3",
-  "frequenz-repo-config[extra-lint-examples] == 0.12.3",
+  "frequenz-repo-config[extra-lint-examples] == 0.13.1",
 ]
 dev = [
   "frequenz-api-weather[dev-mkdocs,dev-flake8,dev-formatting,dev-mkdocs,dev-mypy,dev-noxfile,dev-pylint,dev-pytest]",

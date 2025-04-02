@@ -2,7 +2,6 @@ name: CI
 
 on:
   merge_group:
-  pull_request:
   push:
     # We need to explicitly include tags because otherwise when adding
     # `branches-ignore` it will only trigger on branches.
@@ -26,11 +25,14 @@ env:
 jobs:
   protolint:
     name: Check proto files with protolint
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     steps:
+      - name: Setup Git
+        uses: frequenz-floss/gh-action-setup-git@v1.0.0
+
       - name: Fetch sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           submodules: true
 
@@ -44,7 +46,7 @@ jobs:
           filter_mode: nofilter
           github_token: ${{ secrets.github_token }}
           protolint_flags: proto/
-          protolint_version: "0.45.0"
+          protolint_version: "0.53.0"
           reporter: github-check
 
   nox:
@@ -52,8 +54,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        arch:
+          - amd64
+          - arm
         os:
-          - ubuntu-20.04
+          - ubuntu-24.04
         python:
           - "3.11"
         nox-session:
@@ -61,54 +66,14 @@ jobs:
           # that uses the same venv to run multiple linting sessions
           - "ci_checks_max"
           - "pytest_min"
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}${{ matrix.arch != 'amd64' && format('-{0}', matrix.arch) || '' }}
 
     steps:
-      - name: Setup Git
-        uses: frequenz-floss/gh-action-setup-git@v0.x.x
-        # TODO(cookiecutter): Uncomment this for projects with private dependencies
-        # with:
-        #   username: ${{ secrets.GIT_USER }}
-        #   password: ${{ secrets.GIT_PASS }}
-
-      - name: Print environment (debug)
-        run: env
-
-      - name: Fetch sources
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Run nox
+        uses: frequenz-floss/gh-action-nox@v1.0.0
         with:
           python-version: ${{ matrix.python }}
-          cache: 'pip'
-
-      - name: Install required Python packages
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev-noxfile]
-          pip freeze
-
-      - name: Create nox venv
-        env:
-          NOX_SESSION: ${{ matrix.nox-session }}
-        run: nox --install-only -e "$NOX_SESSION"
-
-      - name: Print pip freeze for nox venv (debug)
-        env:
-          NOX_SESSION: ${{ matrix.nox-session }}
-        run: |
-          . ".nox/$NOX_SESSION/bin/activate"
-          pip freeze
-          deactivate
-
-      - name: Run nox
-        env:
-          NOX_SESSION: ${{ matrix.nox-session }}
-        run: nox -R -e "$NOX_SESSION"
-        timeout-minutes: 10
+          nox-session: ${{ matrix.nox-session }}
 
   # This job runs if all the `nox` matrix jobs ran and succeeded.
   # It is only used to have a single job that we can require in branch
@@ -120,7 +85,7 @@ jobs:
     needs: ["nox"]
     # We skip this job only if nox was also skipped
     if: always() && needs.nox.result != 'skipped'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     env:
       DEPS_RESULT: ${{ needs.nox.result }}
     steps:
@@ -129,31 +94,25 @@ jobs:
 
   build:
     name: Build distribution packages
-    runs-on: ubuntu-20.04
+    # Since this is a pure Python package, we only need to build it once. If it
+    # had any architecture specific code, we would need to build it for each
+    # architecture.
+    runs-on: ubuntu-24.04
+
     steps:
       - name: Setup Git
-        uses: frequenz-floss/gh-action-setup-git@v0.x.x
-        # TODO(cookiecutter): Uncomment this for projects with private dependencies
-        # with:
-        #   username: ${{ secrets.GIT_USER }}
-        #   password: ${{ secrets.GIT_PASS }}
+        uses: frequenz-floss/gh-action-setup-git@v1.0.0
 
       - name: Fetch sources
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: frequenz-floss/gh-action-setup-python-with-deps@v1.0.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install required Python packages
-        run: |
-          python -m pip install -U pip
-          python -m pip install -U build
-          pip freeze
+          dependencies: build
 
       - name: Build the source and binary distribution
         run: python -m build
@@ -166,71 +125,91 @@ jobs:
           if-no-files-found: error
 
   test-installation:
-    name: Test package installation in different architectures
+    name: Test package installation
     needs: ["build"]
-    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm
+        os:
+          - ubuntu-24.04
+        python:
+          - "3.11"
+    runs-on: ${{ matrix.os }}${{ matrix.arch != 'amd64' && format('-{0}', matrix.arch) || '' }}
+
     steps:
       - name: Setup Git
-        uses: frequenz-floss/gh-action-setup-git@v0.x.x
-        # with:
-        #   username: ${{ secrets.GIT_USER }}
-        #   password: ${{ secrets.GIT_PASS }}
+        uses: frequenz-floss/gh-action-setup-git@v1.0.0
 
-      - name: Fetch sources
-        uses: actions/checkout@v4
+      - name: Print environment (debug)
+        run: env
+
       - name: Download package
         uses: actions/download-artifact@v4
         with:
           name: dist-packages
           path: dist
-      - name: Make Git credentials available to docker
+
+      # This is necessary for the `pip` caching in the setup-python action to work
+      - name: Fetch the pyproject.toml file for this action hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.sha }}
         run: |
-         touch ~/.git-credentials  # Ensure the file exists
-         cp ~/.git-credentials git-credentials || true
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      - name: Set up docker-buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Test Installation
-        uses: docker/build-push-action@v6
+          set -ux
+          gh api \
+              -X GET \
+              -H "Accept: application/vnd.github.raw" \
+              "/repos/$REPO/contents/pyproject.toml?ref=$REF" \
+            > pyproject.toml
+
+      - name: Setup Python
+        uses: frequenz-floss/gh-action-setup-python-with-deps@v1.0.0
         with:
-          context: .
-          file: .github/containers/test-installation/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          tags: localhost/test-installation
-          push: false
+          python-version: ${{ matrix.python }}
+          dependencies: dist/*.whl
+
+      - name: Print installed packages (debug)
+        run: python -m pip freeze
+
+  # This job runs if all the `test-installation` matrix jobs ran and succeeded.
+  # It is only used to have a single job that we can require in branch
+  # protection rules, so we don't have to update the protection rules each time
+  # we add or remove a job from the matrix.
+  test-installation-all:
+    # The job name should match the name of the `test-installation` job.
+    name: Test package installation
+    needs: ["test-installation"]
+    # We skip this job only if test-installation was also skipped
+    if: always() && needs.test-installation.result != 'skipped'
+    runs-on: ubuntu-24.04
+    env:
+      DEPS_RESULT: ${{ needs.test-installation.result }}
+    steps:
+      - name: Check matrix job result
+        run: test "$DEPS_RESULT" = "success"
 
   test-docs:
     name: Test documentation website generation
     if: github.event_name != 'push'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Setup Git
-        uses: frequenz-floss/gh-action-setup-git@v0.x.x
-        # TODO(cookiecutter): Uncomment this for projects with private dependencies
-        # with:
-        #   username: ${{ secrets.GIT_USER }}
-        #   password: ${{ secrets.GIT_PASS }}
+        uses: frequenz-floss/gh-action-setup-git@v1.0.0
 
       - name: Fetch sources
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Setup Git user and e-mail
-        uses: frequenz-floss/setup-git-user@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: frequenz-floss/gh-action-setup-python-with-deps@v1.0.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install build dependencies
-        run: |
-          python -m pip install -U pip
-          python -m pip install .[dev-mkdocs]
-          pip freeze
+          dependencies: .[dev-mkdocs]
 
       - name: Generate the documentation
         env:
@@ -248,31 +227,25 @@ jobs:
 
   publish-docs:
     name: Publish documentation website to GitHub pages
-    needs: ["nox-all", "test-installation", "protolint"]
+    needs: ["nox-all", "test-installation-all"]
     if: github.event_name == 'push'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - name: Setup Git
+        uses: frequenz-floss/gh-action-setup-git@v1.0.0
+
       - name: Fetch sources
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Setup Git user and e-mail
-        uses: frequenz-floss/setup-git-user@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: frequenz-floss/gh-action-setup-python-with-deps@v1.0.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install build dependencies
-        run: |
-          python -m pip install -U pip
-          python -m pip install .[dev-mkdocs]
-          pip freeze
+          dependencies: .[dev-mkdocs]
 
       - name: Calculate and check version
         id: mike-version
@@ -327,7 +300,7 @@ jobs:
       # discussions to create the release announcement in the discussion forums
       contents: write
       discussions: write
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Download distribution files
         uses: actions/download-artifact@v4
@@ -369,7 +342,7 @@ jobs:
   publish-to-pypi:
     name: Publish packages to PyPI
     needs: ["create-github-release"]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     permissions:
       # For trusted publishing. See:
       # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
