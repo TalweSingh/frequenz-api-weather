@@ -35,6 +35,7 @@ updates:
         exclude-patterns:
           - "async-solipsism"
           - "frequenz-repo-config*"
+          - "frequenz-api-common*"
           - "markdown-callouts"
           - "mkdocs-gen-files"
           - "mkdocs-literate-nav"
