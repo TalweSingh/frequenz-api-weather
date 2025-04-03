@@ -5,7 +5,7 @@
 requires = [
   "setuptools == 68.1.0",
   "setuptools_scm[toml] == 7.1.0",
-  "frequenz-repo-config[api] == 0.10.0",
+  "frequenz-repo-config[api] == 0.13.1",
   # We need to pin the protobuf, grpcio and  grpcio-tools dependencies to make
   # sure the code is generated using the minimum supported versions, as older
   # versions can't work with code that was generated with newer versions.
@@ -66,20 +66,20 @@ dev-mkdocs = [
   "mkdocs-literate-nav == 0.6.1",
   "mkdocs-macros-plugin == 1.0.4",
   "mkdocs-material == 9.4.4",
-  "mkdocstrings[python] == 0.27.0",
-  "mkdocstrings-python == 1.10.8",
-  "frequenz-repo-config[api] == 0.10.0",
+  "mkdocstrings[python] == 0.28.0",
+  "mkdocstrings-python == 1.14.6",
+  "frequenz-repo-config[api] == 0.13.1",
 ]
 dev-mypy = [
   "mypy == 1.5.1",
   "grpc-stubs == 1.53.0.5",
-  "types-Markdown == 3.7.0.20241204",
+  "types-Markdown == 3.7.0.20250322",
   # For checking the noxfile, docs/ script, and tests
   "frequenz-api-weather[dev-mkdocs,dev-noxfile,dev-pytest]",
 ]
 dev-noxfile = [
   "nox == 2024.4.15",
-  "frequenz-repo-config[api] == 0.10.0",
+  "frequenz-repo-config[api] == 0.13.1",
 ]
 dev-pylint = [
   "pylint == 3.0.2",
@@ -88,7 +88,8 @@ dev-pylint = [
 ]
 dev-pytest = [
   "pytest == 8.3.3",
-  "frequenz-repo-config[extra-lint-examples] == 0.10.0",
+  "frequenz-repo-config[extra-lint-examples] == 0.13.1",
+  "pytest-asyncio == 0.25.3",
 ]
 dev = [
   "frequenz-api-weather[dev-mkdocs,dev-flake8,dev-formatting,dev-mkdocs,dev-mypy,dev-noxfile,dev-pylint,dev-pytest]",
@@ -146,6 +147,8 @@ disable = [
   "unsubscriptable-object",
   # Checked by mypy
   "no-member",
+  "possibly-used-before-assignment",
+  "no-name-in-module",
   # Checked by flake8
   "f-string-without-interpolation",
   "redefined-outer-name",
@@ -156,11 +159,15 @@ disable = [
   "unnecessary-lambda-assignment",
   # Checked by mypy
   "no-member",
+  "possibly-used-before-assignment",
+  "no-name-in-module",
 ]
 
 [tool.pytest.ini_options]
+addopts = "-W=all -Werror -Wdefault::DeprecationWarning -Wdefault::PendingDeprecationWarning -vv"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+required_plugins = ["pytest-asyncio"]
 
 [tool.mypy]
 explicit_package_bases = true

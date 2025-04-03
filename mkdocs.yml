@@ -8,7 +8,7 @@ site_author: "Frequenz Energy-as-a-Service GmbH"
 copyright: "Copyright © 2023 Frequenz Energy-as-a-Service GmbH"
 repo_name: "frequenz-api-weather"
 repo_url: "https://github.com/frequenz-floss/frequenz-api-weather"
-edit_uri: "edit/main/docs/"
+edit_uri: "edit/v0.x.x/docs/"
 strict: true  # Treat warnings as errors
 
 # Build directories
@@ -119,10 +119,9 @@ plugins:
             - https://grpc.github.io/grpc/python/objects.inv
             - https://typing-extensions.readthedocs.io/en/stable/objects.inv
   # Note this plugin must be loaded after mkdocstrings to be able to use macros
-  # inside docstrings. See the comment in `docs/_scripts/macros.py` for more
-  # details
+  # inside docstrings.
   - macros:
-      module_name: docs/_scripts/macros
+      modules: ["frequenz.repo.config.mkdocs.mkdocstrings_macros"]
       on_undefined: strict
       on_error_fail: true
   - search
