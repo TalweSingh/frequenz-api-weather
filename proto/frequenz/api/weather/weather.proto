@@ -117,6 +117,18 @@ message ReceiveHistoricalWeatherForecastRequest {
   // The end of the forecast creation time range to query. Only forecasts
   // created before this UTC timestamp will be included.
   google.protobuf.Timestamp creation_end_ts = 4;
+
+  // Minimum forecast horizon (in hours) to include in the returned forecasts.
+  // Each forecast predicts weather conditions for a certain time span into the
+  // future (the forecast horizon). If not specified, forecasts starting from
+  // the earliest available horizon will be returned.
+  optional uint32 forecast_horizon_min = 5;
+
+  // Maximum forecast horizon (in hours) to include in the returned forecasts.
+  // If not specified, forecasts up to their maximum available horizon will be
+  // returned. If the requested horizon exceeds the available forecast data,
+  // the maximum available horizon will be used.
+  optional uint32 forecast_horizon_max = 6;
 }
 
 // The `ReceiveLiveWeatherForecastRequest` message defines parameters for
