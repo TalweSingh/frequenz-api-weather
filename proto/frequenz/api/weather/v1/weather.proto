@@ -112,11 +112,11 @@ message ReceiveHistoricalWeatherForecastRequest {
 
   // The start of the forecast creation time range to query. Only forecasts
   // created at or after this UTC timestamp will be included.
-  google.protobuf.Timestamp creation_start_ts = 3;
+  google.protobuf.Timestamp start_create_time = 3;
 
   // The end of the forecast creation time range to query. Only forecasts
   // created before this UTC timestamp will be included.
-  google.protobuf.Timestamp creation_end_ts = 4;
+  google.protobuf.Timestamp end_create_time = 4;
 
   // Minimum forecast horizon (in hours) to include in the returned forecasts.
   // Each forecast predicts weather conditions for a certain time span into the
@@ -176,7 +176,7 @@ message LocationForecast {
     }
 
     // The UTC timestamp for which the features in this entry are valid for.
-    google.protobuf.Timestamp valid_at_ts = 1;
+    google.protobuf.Timestamp valid_time = 1;
 
     // All requested weather features.
     repeated FeatureForecast features = 2;
@@ -189,7 +189,7 @@ message LocationForecast {
   frequenz.api.common.v1.Location location = 2;
 
   // The UTC timestamp indicating when the forecast was originally created.
-  google.protobuf.Timestamp creation_ts = 3;
+  google.protobuf.Timestamp create_time = 3;
 }
 
 // The message encapsulates a collection of historical weather forecasts, each
