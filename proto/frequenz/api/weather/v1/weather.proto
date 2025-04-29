@@ -8,8 +8,9 @@
 
 syntax = "proto3";
 
-package frequenz.api.weatherforecast.v1;
+package frequenz.api.weather.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "frequenz/api/common/v1/location.proto";
@@ -97,6 +98,23 @@ enum ForecastFeature {
   FORECAST_FEATURE_SURFACE_NET_SOLAR_RADIATION = 7;
 }
 
+
+// Each forecast predicts weather conditions for a certain time span into the
+// future (the forecast horizon).
+// This filter specifies the slice of time into the future for which
+// weather data should be returned.
+message ForecastHorizon {
+  // Determines how far into the future (from create_time) the forecast window
+  // should start.
+  google.protobuf.Duration offset = 1;
+
+  // Determines how long the window should last.
+  // If the requested duration exceeds the available forecast data, the maximum
+  // available horizon will be used.
+  google.protobuf.Duration duration = 2;
+}
+
+
 // The `ReceiveHistoricalWeatherForecastRequest` message defines parameters for
 // retrieving historical weather forecasts, targeting a specific location
 // and time period, with designated features.
@@ -112,23 +130,16 @@ message ReceiveHistoricalWeatherForecastRequest {
 
   // The start of the forecast creation time range to query. Only forecasts
   // created at or after this UTC timestamp will be included.
-  google.protobuf.Timestamp creation_start_ts = 3;
+  google.protobuf.Timestamp start_create_time = 3;
 
   // The end of the forecast creation time range to query. Only forecasts
   // created before this UTC timestamp will be included.
-  google.protobuf.Timestamp creation_end_ts = 4;
+  google.protobuf.Timestamp end_create_time = 4;
 
-  // Minimum forecast horizon (in hours) to include in the returned forecasts.
-  // Each forecast predicts weather conditions for a certain time span into the
-  // future (the forecast horizon). If not specified, forecasts starting from
-  // the earliest available horizon will be returned.
-  optional uint32 forecast_horizon_min = 5;
+  // Define the forecast horizon of the requested forecasts. If omitted, the
+  // service will respond with the complete forecast horizon range.
+  optional ForecastHorizon forecast_horizon = 5;
 
-  // Maximum forecast horizon (in hours) to include in the returned forecasts.
-  // If not specified, forecasts up to their maximum available horizon will be
-  // returned. If the requested horizon exceeds the available forecast data,
-  // the maximum available horizon will be used.
-  optional uint32 forecast_horizon_max = 6;
 }
 
 // The `ReceiveLiveWeatherForecastRequest` message defines parameters for
@@ -144,17 +155,9 @@ message ReceiveLiveWeatherForecastRequest {
   // will be streamed.
   repeated ForecastFeature features = 2;
 
-  // Minimum forecast horizon (in hours) to include in the returned forecasts.
-  // Each forecast predicts weather conditions for a certain time span into the
-  // future (the forecast horizon). If not specified, forecasts starting from
-  // the earliest available horizon will be returned.
-  optional uint32 forecast_horizon_min = 3;
-
-  // Maximum forecast horizon (in hours) to include in the returned forecasts.
-  // If not specified, forecasts up to their maximum available horizon will be
-  // returned. If the requested horizon exceeds the available forecast data,
-  // the maximum available horizon will be used.
-  optional uint32 forecast_horizon_max = 4;
+  // Define the forecast horizon of the requested forecasts. If omitted, the
+  // service will respond with the complete forecast horizon range.
+  optional ForecastHorizon forecast_horizon = 3;
 }
 
 // The `ForecastResponse` message  provides a structured format for representing
@@ -176,7 +179,7 @@ message LocationForecast {
     }
 
     // The UTC timestamp for which the features in this entry are valid for.
-    google.protobuf.Timestamp valid_at_ts = 1;
+    google.protobuf.Timestamp valid_time = 1;
 
     // All requested weather features.
     repeated FeatureForecast features = 2;
@@ -189,7 +192,7 @@ message LocationForecast {
   frequenz.api.common.v1.Location location = 2;
 
   // The UTC timestamp indicating when the forecast was originally created.
-  google.protobuf.Timestamp creation_ts = 3;
+  google.protobuf.Timestamp create_time = 3;
 }
 
 // The message encapsulates a collection of historical weather forecasts, each
