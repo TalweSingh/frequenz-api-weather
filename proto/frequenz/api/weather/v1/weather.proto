@@ -8,7 +8,7 @@
 
 syntax = "proto3";
 
-package frequenz.api.weatherforecast.v1;
+package frequenz.api.weather.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
