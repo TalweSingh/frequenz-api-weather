@@ -2,7 +2,10 @@
 
 ## Summary
 
-Moves the client to[frequenz-client-weather-python](https://github.com/frequenz-floss/frequenz-client-weather-python).
+Moves the client to [frequenz-client-weather-python](https://github.com/frequenz-floss/frequenz-client-weather-python).
+The package and some fields in the protobuf definitions are renamed.
+Aditionally, the historical RPC returns a stream now and forecasts can be
+filtered by the forecast horizon.
 
 ## Upgrading
 
@@ -19,9 +22,6 @@ the installation and usage instructions provided in the new repository.
 
 - The historical RPC replaced pagination with streaming.
 
-- Added optional `ForecastHorizon`parameter to `StreamHistoricalWeatherForecastRequest`
-  that allows limiting the forecast horizon of returned forecasts.
-
 - Instead of `forecast_horizon_min` and `forecast_horizon_max` parameter in
   `StreamLiveWeatherForecastRequest` a new message `ForecastHorizon` is introduced.
 
@@ -29,5 +29,8 @@ the installation and usage instructions provided in the new repository.
   `frequenz.api.weather.v1`.
 
 ## New Features
+
+- Added optional `ForecastHorizon`parameter to `StreamHistoricalWeatherForecastRequest`
+  that allows limiting the forecast horizon of returned forecasts.
 
 ## Bug Fixes
